@@ -96,6 +96,21 @@ const supabaseStorage = {
   },
 };
 
+// Compatibility layer for old window.storage calls
+window.storage = {
+  async get(key) {
+    return await supabaseStorage.get(key, true);
+  },
+
+  async set(key, value) {
+    return await supabaseStorage.set(key, value, true);
+  },
+
+  async remove(key) {
+    return await supabaseStorage.delete(key, true);
+  }
+};
+
 /* ---------------------------------------------------------------------- */
 /* constants                                                               */
 /* ---------------------------------------------------------------------- */
