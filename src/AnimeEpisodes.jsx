@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Film, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 
 export default function AnimeEpisodes() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -14,8 +14,7 @@ export default function AnimeEpisodes() {
     async function loadTrending() {
       setLoading(true);
       try {
-        // Utilizing a standardized public Consumet proxy route instance setup
-        const res = await fetch('https://consumet.org');
+        const res = await fetch('https://vercel.app');
         const json = await res.json();
         setAnimeResults(json.results || []);
       } catch (err) {
@@ -33,7 +32,7 @@ export default function AnimeEpisodes() {
     if (!searchQuery.trim()) return;
     setLoading(true);
     try {
-      const res = await fetch(`https://consumet.org{encodeURIComponent(searchQuery)}`);
+      const res = await fetch(`https://vercel.app{encodeURIComponent(searchQuery)}`);
       const json = await res.json();
       setAnimeResults(json.results || []);
       setSelectedAnime(null);
@@ -51,11 +50,10 @@ export default function AnimeEpisodes() {
     setSelectedAnime(anime);
     setLoading(true);
     try {
-      const res = await fetch(`https://consumet.org{anime.id}`);
+      const res = await fetch(`https://vercel.app{anime.id}`);
       const json = await res.json();
       setEpisodes(json.episodes || []);
       if (json.episodes && json.episodes.length > 0) {
-        // Load the first available automated episode asset frame instantly
         handleSelectEpisode(json.episodes[0].id);
       }
     } catch (err) {
@@ -68,14 +66,14 @@ export default function AnimeEpisodes() {
   // 4. Fetch Secure Direct Streaming Player Context
   const handleSelectEpisode = async (episodeId) => {
     try {
-      const res = await fetch(`https://consumet.org{episodeId}`);
+      const res = await fetch(`https://vercel.app{episodeId}`);
       const json = await res.json();
-      // Extracts default web-view embed player link maps automatically
       if (json.headers?.Referer) {
         setActiveEmbedUrl(json.headers.Referer);
       } else if (json.sources && json.sources.length > 0) {
-        // Fallback to standard delivery streaming link wrappers
-        setActiveEmbedUrl(`https://vimeo.com{episodeId}?autoplay=1`);
+        setActiveEmbedUrl(json.sources[0].url);
+      } else if (json.download) {
+        setActiveEmbedUrl(json.download);
       }
     } catch (err) {
       console.error("Failed compiling episode stream context source:", err);
