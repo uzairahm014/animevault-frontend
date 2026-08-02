@@ -14,7 +14,7 @@ export default function AnimeEpisodes() {
     async function loadTrending() {
       setLoading(true);
       try {
-        const res = await fetch('https://vercel.app');
+        const res = await fetch('https://anime-api.xyz');
         const json = await res.json();
         setAnimeResults(json.results || []);
       } catch (err) {
@@ -32,7 +32,7 @@ export default function AnimeEpisodes() {
     if (!searchQuery.trim()) return;
     setLoading(true);
     try {
-      const res = await fetch(`https://vercel.app{encodeURIComponent(searchQuery)}`);
+      const res = await fetch(`https://anime-api.xyz{encodeURIComponent(searchQuery)}`);
       const json = await res.json();
       setAnimeResults(json.results || []);
       setSelectedAnime(null);
@@ -50,10 +50,11 @@ export default function AnimeEpisodes() {
     setSelectedAnime(anime);
     setLoading(true);
     try {
-      const res = await fetch(`https://vercel.app{anime.id}`);
+      const res = await fetch(`https://anime-api.xyz{anime.id}`);
       const json = await res.json();
       setEpisodes(json.episodes || []);
       if (json.episodes && json.episodes.length > 0) {
+        // Auto-load player details for the first episode
         handleSelectEpisode(json.episodes[0].id);
       }
     } catch (err) {
@@ -66,11 +67,13 @@ export default function AnimeEpisodes() {
   // 4. Fetch Secure Direct Streaming Player Context
   const handleSelectEpisode = async (episodeId) => {
     try {
-      const res = await fetch(`https://vercel.app{episodeId}`);
+      const res = await fetch(`https://anime-api.xyz{episodeId}`);
       const json = await res.json();
+      
       if (json.headers?.Referer) {
         setActiveEmbedUrl(json.headers.Referer);
       } else if (json.sources && json.sources.length > 0) {
+        // Safe check for primary video track streams
         setActiveEmbedUrl(json.sources[0].url);
       } else if (json.download) {
         setActiveEmbedUrl(json.download);
