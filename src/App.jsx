@@ -29,6 +29,8 @@ import {
   Award,
 } from "lucide-react";
 
+import AnimeEpisodes from './AnimeEpisodes';
+
 /* ---------------------------------------------------------------------- */
 /* Supabase persistent storage — replaces in-page window.storage          */
 /* ---------------------------------------------------------------------- */
@@ -4325,15 +4327,8 @@ export default function App() {
               <section className="max-w-6xl mx-auto px-5 pb-20">
                 {animeEpisodes.length === 0 ? (
                   <Reveal>
-                    <div className="coming-soon-card">
-                      <Film size={30} className="text-red mb-3" />
-                      <p className="mono-label text-dim mb-2">EPISODES COMING SOON</p>
-                      <h3 className="font-logo text-2xl text-fog tracking-tight mb-2">Coming soon</h3>
-                      <p className="text-dim text-sm max-w-sm mx-auto">
-                        @Uzzy is building out the episode library — check back soon for Demon Slayer, Bleach, One Piece and more.
-                      </p>
-                    </div>
-                  </Reveal>
+                    <AnimeEpisodes />
+                   </Reveal>
                 ) : (
                   <>
                     <Reveal>
