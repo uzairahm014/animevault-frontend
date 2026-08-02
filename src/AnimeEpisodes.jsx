@@ -16,13 +16,16 @@ export default function AnimeEpisodes() {
       try {
         const res = await fetch('https://vercel.app');
         const json = await res.json();
-        // Normalizes object parameters to match your frontend grid layout properties
-        const normalized = (json.trendingAnimes || json).map(item => ({
-          id: item.id,
-          title: item.name,
-          image: item.img
-        }));
-        setAnimeResults(normalized);
+        
+        // Maps backend data keys directly to your grid card layout parameters
+        if (json.success && json.data.trendingAnimes) {
+          const normalized = json.data.trendingAnimes.map(item => ({
+            id: item.id,
+            title: item.name,
+            image: item.poster
+          }));
+          setAnimeResults(normalized);
+        }
       } catch (err) {
         console.error("Failed syncing streaming library aggregator:", err);
       } finally {
@@ -40,15 +43,18 @@ export default function AnimeEpisodes() {
     try {
       const res = await fetch(`https://vercel.app{encodeURIComponent(searchQuery)}`);
       const json = await res.json();
-      const normalized = (json.animes || json.results || json).map(item => ({
-        id: item.id,
-        title: item.name,
-        image: item.img
-      }));
-      setAnimeResults(normalized);
-      setSelectedAnime(null);
-      setEpisodes([]);
-      setActiveEmbedUrl('');
+      
+      if (json.success && json.data.animes) {
+        const normalized = json.data.animes.map(item => ({
+          id: item.id,
+          title: item.name,
+          image: item.poster
+        }));
+        setAnimeResults(normalized);
+        setSelectedAnime(null);
+        setEpisodes([]);
+        setActiveEmbedUrl('');
+      }
     } catch (err) {
       console.error("Search query execution node failure:", err);
     } finally {
@@ -63,9 +69,13 @@ export default function AnimeEpisodes() {
     try {
       const res = await fetch(`https://vercel.app{anime.id}`);
       const json = await res.json();
-      setEpisodes(json.episodes || []);
-      if (json.episodes && json.episodes.length > 0) {
-        handleSelectEpisode(json.episodes[0].id);
+      
+      if (json.success && json.data.episodes) {
+        setEpisodes(json.data.episodes);
+        if (json.data.episodes.length > 0) {
+          // Instantly loads video stream link parameters for episode 1
+          handleSelectEpisode(json.data.episodes[0].episodeId);
+        }
       }
     } catch (err) {
       console.error("Failed extracting track library profiles:", err);
@@ -77,16 +87,14 @@ export default function AnimeEpisodes() {
   // 4. Fetch Secure Direct Streaming Player Context
   const handleSelectEpisode = async (episodeId) => {
     try {
-      const res = await fetch(`https://vercel.app{episodeId}`);
+      const res = await fetch(`https://vercel.app{episodeId}&server=hd-1&category=sub`);
       const json = await res.json();
       
-      // Auto-extracts web-view video stream source configuration blocks cleanly
-      if (json.streamUrl) {
-        setActiveEmbedUrl(json.streamUrl);
-      } else if (json.headers?.Referer) {
-        setActiveEmbedUrl(json.headers.Referer);
-      } else if (json.sources && json.sources.length > 0) {
-        setActiveEmbedUrl(json.sources[0].url);
+      if (json.success && json.data.sources && json.data.sources.length > 0) {
+        // Formats your secure web presentation iframe target directly
+        setActiveEmbedUrl(json.data.sources[0].url);
+      } else if (json.data?.headers?.Referer) {
+        setActiveEmbedUrl(json.data.headers.Referer);
       }
     } catch (err) {
       console.error("Failed compiling episode stream context source:", err);
@@ -155,7 +163,7 @@ export default function AnimeEpisodes() {
             )}
             <div className="mt-4 px-1">
               <button 
-                onClick={() => setSelectedAnime(null)} 
+                onClick={() => { setSelectedAnime(null); setActiveEmbedUrl(''); }} 
                 className="text-[10px] uppercase font-bold text-red-500 hover:underline mb-2 block"
               >
                 ← Return to Library Catalog
@@ -170,8 +178,8 @@ export default function AnimeEpisodes() {
             <div className="grid grid-cols-4 gap-2">
               {episodes.map((ep, idx) => (
                 <button
-                  key={ep.id || idx}
-                  onClick={() => handleSelectEpisode(ep.id)}
+                  key={ep.episodeId || idx}
+                  onClick={() => handleSelectEpisode(ep.episodeId)}
                   className="bg-zinc-950 border border-zinc-800 hover:border-red-500 text-zinc-400 hover:text-white py-2 rounded text-center text-xs font-medium transition"
                 >
                   {ep.number || idx + 1}
