@@ -27,8 +27,8 @@ export default function AnimeEpisodes() {
         }
       `;
       try {
-        // ✅ CORRECT GATEWAY URL: This endpoint has open CORS policies for apps
-        const res = await fetch('https://anilist.co', {
+        // Official AniList GraphQL endpoint (open CORS)
+        const res = await fetch('https://graphql.anilist.co', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify({ query })
@@ -73,7 +73,7 @@ export default function AnimeEpisodes() {
       }
     `;
     try {
-      const res = await fetch('https://anilist.co', {
+      const res = await fetch('https://graphql.anilist.co', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({ query, variables: { search: searchQuery } })
@@ -117,9 +117,10 @@ export default function AnimeEpisodes() {
 
   // 4. Inject Dynamic Stream Embedding
   const handleSelectEpisode = (anime, episodeNumber) => {
-    const targetId = anime.malId || anime.id;
-    // Uses an active multi-server gateway mapping the exact database ID automatically
-    const streamTarget = `https://embed.su{targetId}/${episodeNumber}`;
+    // Uses an active multi-server gateway mapping the database ID automatically
+    const streamTarget = anime.malId
+      ? `https://vidsrc.cc/v2/embed/anime/mal${anime.malId}/${episodeNumber}/sub`
+      : `https://vidsrc.cc/v2/embed/anime/ani${anime.id}/${episodeNumber}/sub`;
     setActiveEmbedUrl(streamTarget);
   };
 
