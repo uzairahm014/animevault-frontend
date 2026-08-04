@@ -27,16 +27,18 @@ import {
   Settings,
   Send,
   Award,
+  Mail,
 } from "lucide-react";
 
 import AnimeEpisodes from './AnimeEpisodes';
+import MessagesPanel from './Messages';
 
 /* ---------------------------------------------------------------------- */
 /* Supabase persistent storage — replaces in-page window.storage          */
 /* ---------------------------------------------------------------------- */
 
-const SUPABASE_URL = "https://jgbpkfbuhttmqpsvynul.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpnYnBrZmJ1aHR0bXFwc3Z5bnVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyNDYxNDYsImV4cCI6MjA5ODgyMjE0Nn0.0rEg1rRFJxpIffVuLjh8-pimgGIcRTympU9n446meBs";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://jgbpkfbuhttmqpsvynul.supabase.co";
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpnYnBrZmJ1aHR0bXFwc3Z5bnVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyNDYxNDYsImV4cCI6MjA5ODgyMjE0Nn0.0rEg1rRFJxpIffVuLjh8-pimgGIcRTympU9n446meBs";
 
 const SB_HEADERS = {
   apikey: SUPABASE_ANON_KEY,
@@ -122,19 +124,23 @@ const ADMIN_USERNAMES = ["uzzy"]; // e.g. ["uzzy", "name2", "name3"]
 // Keep backwards-compat alias
 const ADMIN_USERNAME = ADMIN_USERNAMES[0];
 
+// weakHash of the original admin password — used only to verify (and repair)
+// legacy accounts that predate password storage. Never creates a new account.
+const LEGACY_ADMIN_PASSWORD_HASH = "cmkjn";
+
 // ── Cloudinary direct upload (FREE at cloudinary.com) ──────────────────────
 // 1. Sign up free at cloudinary.com
 // 2. Go to Settings → Upload → Add upload preset → set to "Unsigned" → save
 // 3. Paste your cloud name and preset name below
-const CLOUDINARY_CLOUD_NAME = ""; // e.g. "dxabcde123"
-const CLOUDINARY_UPLOAD_PRESET = ""; // e.g. "animevault_unsigned"
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || ""; // e.g. "dxabcde123"
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || ""; // e.g. "animevault_unsigned"
 const CLOUDINARY_ENABLED = !!(CLOUDINARY_CLOUD_NAME && CLOUDINARY_UPLOAD_PRESET);
 
 // ── Real-time chat backend (the animevault-backend project) ────────────────
 // Deploy animevault-backend (see its README) then paste its live URL here.
 // While this is empty, chat automatically falls back to Supabase polling
 // (still shared and working, just refreshes every 4s instead of instantly).
-const BACKEND_URL = ""; // e.g. "https://animevault-backend.onrender.com"
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ""; // e.g. "https://animevault-backend.onrender.com"
 const REALTIME_CHAT_ENABLED = !!BACKEND_URL;
 
 async function uploadToCloudinary(file, onProgress) {
@@ -2710,6 +2716,8 @@ export default function App() {
   const [notifSettings, setNotifSettings] = useState({ likes: true, comments: true, follows: true });
   const [myNotifications, setMyNotifications] = useState([]);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [messagesOpen, setMessagesOpen] = useState(false);
+  const [dmUnread, setDmUnread] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [chatOpen, setChatOpen] = useState(false);
@@ -2885,6 +2893,29 @@ export default function App() {
     }
     return () => { active = false; };
   }, [chatOpen]);
+
+  /* ---- background poll: unread private-message badge ---- */
+  useEffect(() => {
+    if (!session) { setDmUnread(0); return; }
+    let active = true;
+    async function poll() {
+      try {
+        const r = await supabaseStorage.get("dm-index", true);
+        const list = r && r.value ? JSON.parse(r.value) : [];
+        const mine = list.filter((c) => (c.members || []).includes(session.username));
+        let count = 0;
+        for (const c of mine) {
+          const read = await supabaseStorage.get(`dm-read:${c.id}`, false);
+          const readTs = read && read.value ? Number(read.value) : 0;
+          if (c.lastMessage && c.lastMessage.author !== session.username && c.lastMessage.at > readTs) count++;
+        }
+        if (active) setDmUnread(count);
+      } catch (e) {}
+    }
+    poll();
+    const iv = setInterval(poll, 20000);
+    return () => { active = false; clearInterval(iv); };
+  }, [session, messagesOpen]);
 
   /* ---- scroll: progress bar, parallax, sticky nav ---- */
   useEffect(() => {
@@ -3079,9 +3110,19 @@ export default function App() {
   }
 
   function handleLogin(usernameRaw, password) {
-    const username = usernameRaw.trim();
-    const u = users[username];
-    if (!u || u.passwordHash !== weakHash(password)) return setAuthError("Wrong username or password.");
+    const input = usernameRaw.trim();
+    // Case-insensitive username match against existing accounts
+    const username = Object.keys(users).find((k) => k.toLowerCase() === input.toLowerCase());
+    const u = username ? users[username] : null;
+    if (!u) return setAuthError("Wrong username or password.");
+    if (u.passwordHash) {
+      if (u.passwordHash !== weakHash(password)) return setAuthError("Wrong username or password.");
+    } else {
+      // Legacy account with no stored password (e.g. the original admin record):
+      // verify against the known admin credential and repair the record in place.
+      if (weakHash(password) !== LEGACY_ADMIN_PASSWORD_HASH) return setAuthError("Wrong username or password.");
+      saveUsers({ ...users, [username]: { ...u, passwordHash: weakHash(password), joinedAt: u.joinedAt || Date.now(), bio: u.bio || "", followers: u.followers || [], following: u.following || [], verified: !!u.verified } });
+    }
     saveSession({ username });
     setAuthOpen(false);
     setAuthError("");
@@ -3578,6 +3619,10 @@ export default function App() {
             )}
             <button onClick={() => setChatOpen(true)} className="nav-link flex items-center gap-1">
               <MessageCircle size={12} /> Chat
+            </button>
+            <button onClick={() => setMessagesOpen(true)} className="nav-link flex items-center gap-1 relative">
+              <Mail size={12} /> Messages
+              {dmUnread > 0 && <span className="notif-dot" style={{ position: "static", marginLeft: 2 }} />}
             </button>
           </nav>
 
@@ -4596,6 +4641,14 @@ export default function App() {
         setDraft={setChatDraft}
         onSend={sendChatMessage}
       />
+      <MessagesPanel
+        open={messagesOpen}
+        onClose={() => setMessagesOpen(false)}
+        session={session}
+        users={users}
+        storage={supabaseStorage}
+        showToast={showToast}
+      />
       <Toast message={toast} />
 
       {/* draggable floating chat button */}
@@ -4831,6 +4884,11 @@ html { scroll-behavior: smooth; }
 .notif-unread { background: rgba(232,40,63,0.07); }
 /* chat drawer */
 .chat-backdrop { position: fixed; inset: 0; z-index: 88; }
+/* private messages */
+.dm-conv-row { padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 6px; background: var(--glass-bg); transition: border-color .12s ease; }
+.dm-conv-row:hover { border-color: rgba(232,40,63,0.45); }
+.dm-unread-badge { flex-shrink: 0; min-width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; background: #E8283F; color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; border-radius: 999px; padding: 0 5px; }
+.dm-typing { animation: pulse-dot 1.6s infinite; }
 .chat-drawer { position: fixed; right: 0; top: 0; bottom: 0; width: min(360px, 100vw); z-index: 89; transform: translateX(100%); transition: transform 0.35s cubic-bezier(.16,1,.3,1); }
 .chat-drawer-open { transform: translateX(0); }
 .chat-drawer-inner { display: flex; flex-direction: column; height: 100%; background: var(--bg); border-left: 1px solid var(--glass-border); backdrop-filter: blur(28px) saturate(160%); }
